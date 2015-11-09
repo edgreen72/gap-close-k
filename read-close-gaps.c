@@ -18,7 +18,7 @@
 #define CONS_LENGTH_CUT (95) // minimum percent of spanning reads to consensus to close gap
 #define CONS_BASE_PERC (90) // minimum percent of bases that must match to call a consensus base at each position
 #define DEBUG (1)
-#define VERSION (4)
+#define VERSION (5)
 
 typedef struct kmers {
   unsigned int k; // length of the kmers
@@ -27,6 +27,7 @@ typedef struct kmers {
 typedef struct kmers* KSP;
 
 typedef struct gaps {
+  size_t* gap_starts;
   size_t* gap_ends;
   size_t num_gaps;
 } Gaps;
@@ -59,7 +60,8 @@ void populate_spans( SP spans, const char k1[], const char k2[], const char fast
 size_t consensus_length( const SP spans );
 void find_cons_seq( SP spans, size_t cons_length );
 char best_base_from_counts( int* perc, const int As, const int Cs, const int Gs, const int Ts );
-int close_unique_k( size_t beg, size_t end, const char* seq, const KSP ks, char* kmer );
+int close_unique_k( size_t beg, size_t end, const char* seq, const KSP ks, char* kmer,
+		    size_t* mko );
 void populate_GP( const char* seq, GP gaps, const int num_n );
 SP init_Spans( void );
 void reset_spans( SP spans );
@@ -166,7 +168,7 @@ void make_gap_table(  const char* genome_fn, const KSP ks, const int num_n,
   FILE* fa;
   GP gaps_p;
   SP spanners;
-  size_t seq_len, beg, end, i;
+  size_t seq_len, beg, end, i, k1_mko, k2_mko;
   int k1_pos, k2_pos;
   char k1[K+1]; // kmer upstream of gap
   char k2[K+1]; // kmer downstream of gap
@@ -201,7 +203,7 @@ void make_gap_table(  const char* genome_fn, const KSP ks, const int num_n,
       else {
         beg = gaps_p->gap_starts[i] - flank_size;
       }
-      k1_pos = close_unique_k( beg, gaps_p->gap_starts[i], seq, ks, k1 );
+      k1_pos = close_unique_k( beg, gaps_p->gap_starts[i], seq, ks, k1, &k1_mko );
 
       if ( gaps_p->gap_ends[i] + flank_size > seq_len ) {
         end = seq_len;
@@ -209,17 +211,17 @@ void make_gap_table(  const char* genome_fn, const KSP ks, const int num_n,
       else {
         end = gaps_p->gap_ends[i] + FLANK_SIZE;
       }
-      k2_pos = close_unique_k( end, gaps_p->gap_ends[i], seq, ks, k2 );
+      k2_pos = close_unique_k( end, gaps_p->gap_ends[i], seq, ks, k2, &k2_mko );
 
-      /* If we found suitable k1 and k2, then search the reads for them */
+      /* If we found suitable k1 and k2, then just print some info on them */
       if ( (k1_pos >= 0) &&
            (k2_pos >= 0) ) {
-        printf( "%s %d %d %d %d %s %s\n",
+        printf( "%s %d %d %d %d %s %s %d %d\n",
                 id, (int)gaps_p->gap_starts[i], (int)gaps_p->gap_ends[i],
-                (int)k1_pos, (int)k2_pos, k1, k2 );
+                (int)k1_pos, (int)k2_pos, k1, k2, (int)k1_mko, (int)k2_mko );
       }
       else {
-        printf( "%s %d %d NA NA NA NA\n",
+        printf( "%s %d %d NA NA NA NA NA NA\n",
                 id, (int)gaps_p->gap_starts[i], (int)gaps_p->gap_ends[i] );
       }
     }
@@ -247,7 +249,7 @@ void fasta_close_gaps( const char* genome_fn, const char* fastq_fn,
   FILE* fq;
   GP gaps_p;
   SP spanners;
-  size_t seq_len, beg, end, cons_length, i;
+  size_t seq_len, beg, end, cons_length, i, k1_mko, k2_mko;
   int k1_pos, k2_pos;
   SP spans;
   char k1[K+1]; // kmer upstream of gap
@@ -287,7 +289,7 @@ void fasta_close_gaps( const char* genome_fn, const char* fastq_fn,
       else {
         beg = gaps_p->gap_starts[i] - flank_size;
       }
-      k1_pos = close_unique_k( beg, gaps_p->gap_starts[i], seq, ks, k1 );
+      k1_pos = close_unique_k( beg, gaps_p->gap_starts[i], seq, ks, k1, &k1_mko );
 
       if ( gaps_p->gap_ends[i] + flank_size > seq_len ) {
         end = seq_len;
@@ -295,7 +297,7 @@ void fasta_close_gaps( const char* genome_fn, const char* fastq_fn,
       else {
         end = gaps_p->gap_ends[i] + FLANK_SIZE;
       }
-      k2_pos = close_unique_k( end, gaps_p->gap_ends[i], seq, ks, k2 );
+      k2_pos = close_unique_k( end, gaps_p->gap_ends[i], seq, ks, k2, &k2_mko );
 
       /* If we found suitable k1 and k2, then search the reads for them */
       if ( (k1_pos >= 0) &&
@@ -313,15 +315,16 @@ void fasta_close_gaps( const char* genome_fn, const char* fastq_fn,
             strncpy( gen_gap_seq, &seq[k1_pos], (k2_pos - k1_pos + ks->k) );
             gen_gap_seq[k2_pos - k1_pos + ks->k] = '\0';
             find_cons_seq( spans, cons_length );
-            printf( "Close gap in %s between %d and %d with %d spanning reads\n", 
-                    id, (int)k1_pos, (int)(k2_pos + ks->k), (int)spans->num_spanners );
+            printf( "Close gap in %s between %d and %d with %d spanning reads. %d and %d kmer occurances\n", 
+                    id, (int)k1_pos, (int)(k2_pos + ks->k), (int)spans->num_spanners,
+		    (int)k1_mko, (int)k2_mko );
             printf( "Genome: %s\nConsen: %s\n\n",
                     gen_gap_seq,
                     spans->cons_seq );
             free( gen_gap_seq );
           }
           else {
-            printf( "Not close gap in %s between %d and %d. No consensus length\n",
+            printf( "Did not close gap in %s between %d and %d. No consensus length\n",
                     id, (int)gaps_p->gap_starts[i], (int)gaps_p->gap_ends[i] ); 
           }
         }
@@ -549,10 +552,12 @@ char best_base_from_counts( int* perc, const int As, const int Cs, const int Gs,
    downstream of the region mentioned. If the first coordinate is bigger, the gap
    is upstream of the region mentioned
 */
-int close_unique_k( size_t beg, size_t end, const char* seq, const KSP ks, char* kmer ) {
-  size_t min_kmer_occur = MAX_KMER_OCCUR; // initialize this
+int close_unique_k( size_t beg, size_t end, const char* seq, const KSP ks,
+		    char* kmer, size_t* mko ) {
+  size_t min_kmer_occur = MAX_KMER_OCCUR; // initialize this; used to keep track of how many
+  // times the kmer that is lowest in genome-wide occurance is seen
   size_t pos;
-  size_t min_k_pos = 0;
+  size_t min_k_pos = 0; // keep the position of the most rare kmer found
   size_t inx;
 
   /* Check to make sure region is big enough for at least one k-mer */
@@ -563,7 +568,7 @@ int close_unique_k( size_t beg, size_t end, const char* seq, const KSP ks, char*
   if ( beg < end ) { // gap starts at end
     for( pos = beg; pos < (end - ks->k); pos++ ) {
       if ( kmer2inx( &seq[pos], ks->k, &inx ) ) {
-        if ( ks->ka[inx] < min_kmer_occur ) {
+        if ( ks->ka[inx] <= min_kmer_occur ) {
           min_kmer_occur = ks->ka[inx];
           min_k_pos = pos;
         }
@@ -573,13 +578,14 @@ int close_unique_k( size_t beg, size_t end, const char* seq, const KSP ks, char*
   else { // go backwards
     for( pos = (beg - ks->k); pos >= end; pos-- ) {
       if ( kmer2inx( &seq[pos], ks->k, &inx ) ) {
-        if ( ks->ka[inx] < min_kmer_occur ) {
+        if ( ks->ka[inx] <= min_kmer_occur ) {
           min_kmer_occur = ks->ka[inx];
           min_k_pos = pos;
         }
       }
     }
   }
+  *mko = min_kmer_occur;
   if (min_kmer_occur < MAX_UNIQ_KMER ) { // find ANYTHING?
     strncpy( kmer, &seq[min_k_pos], ks->k );
     kmer[ks->k] = '\0';

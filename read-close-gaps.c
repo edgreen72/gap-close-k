@@ -17,8 +17,11 @@
 #define MAX_FQ_LEN (1024) // maximum length of a sequenc read in fastq file
 #define CONS_LENGTH_CUT (95) // minimum percent of spanning reads to consensus to close gap
 #define CONS_BASE_PERC (90) // minimum percent of bases that must match to call a consensus base at each position
-#define DEBUG (1)
-#define VERSION (5)
+#define DEBUG (0)
+#define VERSION (6)
+
+int debug_info = DEBUG; // a true global variable - Use this in functions directly, i.e. not passed
+
 
 typedef struct kmers {
   unsigned int k; // length of the kmers
@@ -89,6 +92,7 @@ void help( void ) {
   printf( "   -F <size of Flank region to find unique kmers; default = %d\n", FLANK_SIZE );
   printf( "   -m <minimum kmer-containing, gap-spanning reads to close a gap; default = %d\n", MIN_SPANNERS );
   printf( "   -t <send a table to STDOUT with ID GSTART GEND K1POS K2POS K1 K2>\n" );
+  printf( "   -d <DEBUG mode - print a bunch of info to STDERR along the way>\n" );
   printf( "If the -t option is given, read-close-gaps will not attempt to close any\n" );
   printf( "gaps. Instead, it will just make a table of the gaps seen in the input\n" );
   printf( "genome and the kmers that it would attempt to use to close these gaps.\n" );
@@ -114,7 +118,7 @@ int main( int argc, char* argv[] ) {
     help();
   }
   
-  while( (ich=getopt( argc, argv, "g:k:n:f:F:m:t" )) != -1 ) {
+  while( (ich=getopt( argc, argv, "g:k:n:f:F:m:td" )) != -1 ) {
     switch(ich) {
     case 'g' :
       strcpy( genome_fn, optarg );
@@ -133,8 +137,12 @@ int main( int argc, char* argv[] ) {
       break;
     case 'm' : // Minimum number of reads spanning gap to close it
       min_spanners = atoi( optarg );
+      break;
     case 't' :
       make_GT = 1;
+      break;
+    case 'd' :
+      debug_info = 1;
       break;
     default :
       help();
@@ -175,7 +183,7 @@ void make_gap_table(  const char* genome_fn, const KSP ks, const int num_n,
   char id[MAX_ID_LEN+1];
   char* seq;
 
-  if ( DEBUG ) {
+  if ( debug_info ) {
     fprintf( stderr, "Starting to make gap table\n" );
     fflush(stderr);
   }
@@ -184,7 +192,7 @@ void make_gap_table(  const char* genome_fn, const KSP ks, const int num_n,
   seq = (char*)malloc(sizeof(char)*(MAX_SEQ_LEN+1));
 
   while( seq_len = next_fa( fa, seq, id ) ) {
-    if ( DEBUG ) {
+    if ( debug_info ) {
       fprintf( stderr, "Scanning %s for gaps\n", id );
       fflush(stderr);
     }
@@ -258,7 +266,7 @@ void fasta_close_gaps( const char* genome_fn, const char* fastq_fn,
   char* gen_gap_seq;
   char* seq;
 
-  if ( DEBUG ) {
+  if ( debug_info ) {
     fprintf( stderr, "Starting gap closing\n" );
     fflush(stderr);
   }
@@ -270,7 +278,7 @@ void fasta_close_gaps( const char* genome_fn, const char* fastq_fn,
   seq = (char*)malloc(sizeof(char)*(MAX_SEQ_LEN+1));
 
   while( seq_len = next_fa( fa, seq, id ) ) {
-    if ( DEBUG ) {
+    if ( debug_info ) {
       fprintf( stderr, "Scanning %s for gaps\n", id );
       fflush(stderr);
     }
@@ -698,7 +706,7 @@ int fasta_pop_kmers( const char genome_fn[], KSP ks ) {
 
   /* Go through the fasta file, one sequence at a time */
   while( seq_len = next_fa( fa, seq, id ) ) {
-    if ( DEBUG ) {
+    if ( debug_info ) {
       fprintf( stderr, "Counting kmers in %s\n", id );
     }
     if ( seq_len >= ks->k ) { // need at least one k-mer to count kmers!

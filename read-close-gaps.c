@@ -738,6 +738,7 @@ size_t next_fa( FILE* fp, char* seq, char* id ) {
       id[i++] = c;
       c = fgetc(fp);
     }
+    id[i] = '\0';
     while( c != '\n' ) {
       c = fgetc(fp);
     }

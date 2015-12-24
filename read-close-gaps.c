@@ -4,7 +4,7 @@
 #include <string.h>
 
 #define MAX_FN_LEN (1024)
-#define MAX_SEQ_LEN (8388608) // ~8 Mb
+#define MAX_SEQ_LEN (128388608) // ~8 Mb
 #define MAX_ID_LEN (256)
 #define MAX_KMER_OCCUR (128)
 #define MAX_UNIQ_KMER (3)
@@ -59,6 +59,9 @@ void make_gap_table(  const char* genome_fn, const KSP ks, const int num_n,
 void fasta_close_gaps( const char* genome_fn, const char* fastq_fn,
                        const KSP ks, const int num_n, const int flank_size,
                        const int min_spanners );
+void fasta_close_gaps_table( const char* genome_fn, const char* fastq_fn,
+			     const KSP ks, const int num_n, const int flank_size,
+			     const int min_spanners );
 void populate_spans( SP spans, const char k1[], const char k2[], const char fastq_fn[] );
 size_t consensus_length( const SP spans );
 void find_cons_seq( SP spans, size_t cons_length );
@@ -92,6 +95,7 @@ void help( void ) {
   printf( "   -F <size of Flank region to find unique kmers; default = %d\n", FLANK_SIZE );
   printf( "   -m <minimum kmer-containing, gap-spanning reads to close a gap; default = %d\n", MIN_SPANNERS );
   printf( "   -t <send a table to STDOUT with ID GSTART GEND K1POS K2POS K1 K2>\n" );
+  printf( "   -E <output only a table of Edits to make for gaps that can be closed>\n" );
   printf( "   -d <DEBUG mode - print a bunch of info to STDERR along the way>\n" );
   printf( "If the -t option is given, read-close-gaps will not attempt to close any\n" );
   printf( "gaps. Instead, it will just make a table of the gaps seen in the input\n" );
@@ -112,13 +116,14 @@ int main( int argc, char* argv[] ) {
   char fastq_fn[MAX_FN_LEN];
   KSP ks;
   int make_GT = 0;
+  int just_edits = 0;
 
   /*          PROCESS ARGUMENTS            */
   if ( argc == 1 ) {
     help();
   }
   
-  while( (ich=getopt( argc, argv, "g:k:n:f:F:m:td" )) != -1 ) {
+  while( (ich=getopt( argc, argv, "g:k:n:f:F:m:tdE" )) != -1 ) {
     switch(ich) {
     case 'g' :
       strcpy( genome_fn, optarg );
@@ -144,6 +149,9 @@ int main( int argc, char* argv[] ) {
     case 'd' :
       debug_info = 1;
       break;
+    case 'E' :
+      just_edits = 1;
+      break;
     default :
       help();
     }
@@ -160,6 +168,11 @@ int main( int argc, char* argv[] ) {
 
   if ( make_GT ) {
     make_gap_table( genome_fn, ks, num_n, flank_size );
+    exit( 0 );
+  }
+  if ( just_edits ) { // Just output a table of  edits to make from gaps that can be closed
+    fasta_close_gaps_table( genome_fn, fastq_fn, ks, num_n,
+			    flank_size, min_spanners );
   }
   else {
     /* Go through the input genome, again, one fasta record at a time */
@@ -345,6 +358,130 @@ void fasta_close_gaps( const char* genome_fn, const char* fastq_fn,
     free_Gaps( gaps_p ); // free the memory we had allocated for this GP and its guts
   }
 }
+
+/* fasta_close_gaps_table
+   ARGS: (3) const char genome_fn - the filename of the fasta format genome sequence
+             const char fastq_fn  - the filename of the fastq format reads that might
+                                    span gaps
+             const KSP ks         - the kmers structure 
+   RETURNS: nothing (for now)
+   Goes through each sequence in the genome and finds gaps (runs of Ns). Then, finds
+   the most unique and closest kmers flanking the gap. Then, finds reads containing
+   both of those kmers and determines if they are unanimous about the distance between
+   the kmers. If so, take the consensus sequence from the reads that span the gap and
+   output a table with these columns:
+   1. Scaffold/contig/chr ID
+   2. Start position on input genome (0-indexed)
+   3. End position on input genome (0-indexed)
+   4. Current (input) genome sequence (with Ns)
+   5. Consensus gap-closing sequence - may be a different length than 4!
+   6. Uniqueness in the genome of entering (upstream) kmer
+   7. Uniqueness in the genome of exiting (downstream) kmer
+*/
+void fasta_close_gaps_table( const char* genome_fn, const char* fastq_fn,
+			     const KSP ks, const int num_n, const int flank_size,
+			     const int min_spanners ) {
+  FILE* fa;
+  FILE* fq;
+  GP gaps_p;
+  SP spanners;
+  size_t seq_len, beg, end, cons_length, i, k1_mko, k2_mko;
+  int k1_pos, k2_pos;
+  int unclosed_insuff_spanners = 0;
+  int unclosed_no_cons_len = 0;
+  int unclosed_no_kmer_in_reads = 0;
+  int closed = 0;
+  SP spans;
+  char k1[K+1]; // kmer upstream of gap
+  char k2[K+1]; // kmer downstream of gap
+  char id[MAX_ID_LEN+1];
+  char* gen_gap_seq;
+  char* seq;
+
+  if ( debug_info ) {
+    fprintf( stderr, "Starting gap closing\n" );
+    fflush(stderr);
+  }
+
+  fa = fileOpen( genome_fn, "r" );
+  fq = fileOpen( fastq_fn, "r" );
+  spans = init_Spans();
+  spans->num_spanners = 0; // unnecessary
+  seq = (char*)malloc(sizeof(char)*(MAX_SEQ_LEN+1));
+
+  while( seq_len = next_fa( fa, seq, id ) ) {
+    if ( debug_info ) {
+      fprintf( stderr, "Scanning %s for gaps\n", id );
+      fflush(stderr);
+    }
+
+    /* Initialize the structure for keeping gap positions */
+    gaps_p = init_Gaps( seq_len, num_n );
+
+    /* Scan the sequence for runs of Ns and populate the gaps_p */
+    populate_GP( seq, gaps_p, num_n );
+
+    /* Try to close each gap */
+    for( i = 0; i < gaps_p->num_gaps; i++ ) {
+      if ( gaps_p->gap_starts[i] < flank_size ) {
+        beg = 0;
+      }
+      else {
+        beg = gaps_p->gap_starts[i] - flank_size;
+      }
+      k1_pos = close_unique_k( beg, gaps_p->gap_starts[i], seq, ks, k1, &k1_mko );
+
+      if ( gaps_p->gap_ends[i] + flank_size > seq_len ) {
+        end = seq_len;
+      }
+      else {
+        end = gaps_p->gap_ends[i] + FLANK_SIZE;
+      }
+      k2_pos = close_unique_k( end, gaps_p->gap_ends[i], seq, ks, k2, &k2_mko );
+
+      /* If we found suitable k1 and k2, then search the reads for them */
+      if ( (k1_pos >= 0) &&
+           (k2_pos >= 0) ) {
+        reset_spans( spans );
+        populate_spans( spans, k1, k2, fastq_fn );
+        if ( spans->num_spanners < min_spanners ) {
+	  unclosed_insuff_spanners++;
+        }
+        else {
+          cons_length = consensus_length(spans);
+          if ( cons_length ) {
+            gen_gap_seq = (char*)malloc(sizeof(char) * (k2_pos - k1_pos + ks->k + 1));
+            strncpy( gen_gap_seq, &seq[k1_pos], (k2_pos - k1_pos + ks->k) );
+            gen_gap_seq[k2_pos - k1_pos + ks->k] = '\0';
+            find_cons_seq( spans, cons_length );
+	    printf( "%s %d %d %s %s %d %d\n",
+		    id,
+		    (int)k1_pos,
+		    (int)(k2_pos + ks->k),
+		    gen_gap_seq,
+		    spans->cons_seq,
+		    (int)k1_mko,
+		    (int)k2_mko );
+	    closed++;
+	    free( gen_gap_seq );
+          }
+          else {
+	    unclosed_no_cons_len++;
+          }
+        }
+      }
+      else { // didn't find one or more of k1, k2
+	unclosed_no_kmer_in_reads++;
+      }
+    }
+    free_Gaps( gaps_p ); // free the memory we had allocated for this GP and its guts
+  }
+  fprintf( stderr, "Closed gaps: %d\n", closed );
+  fprintf( stderr, "Unclosed gaps - not enough spanning reads: %d\n", unclosed_insuff_spanners );
+  fprintf( stderr, "Unclosed gaps - no consensus length in spanning reads: %d\n", unclosed_no_cons_len );
+  fprintf( stderr, "Unclosed gaps - one or both kmers not found in any reads: %d\n", unclosed_no_kmer_in_reads );
+}
+
 
 /* reset_spans */
 void reset_spans( SP spans ) {

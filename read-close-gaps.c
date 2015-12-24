@@ -94,12 +94,17 @@ void help( void ) {
   printf( "   -n <number of consecutive Ns to define a gap; default = %d\n", NUM_N );
   printf( "   -F <size of Flank region to find unique kmers; default = %d\n", FLANK_SIZE );
   printf( "   -m <minimum kmer-containing, gap-spanning reads to close a gap; default = %d\n", MIN_SPANNERS );
-  printf( "   -t <send a table to STDOUT with ID GSTART GEND K1POS K2POS K1 K2>\n" );
+  printf( "   -t <send a table to STDOUT with ID GSTART GEND K1POS K2POS K1 K2 RCK1 RCK2 K1U K2U>\n" );
   printf( "   -E <output only a table of Edits to make for gaps that can be closed>\n" );
   printf( "   -d <DEBUG mode - print a bunch of info to STDERR along the way>\n" );
   printf( "If the -t option is given, read-close-gaps will not attempt to close any\n" );
   printf( "gaps. Instead, it will just make a table of the gaps seen in the input\n" );
   printf( "genome and the kmers that it would attempt to use to close these gaps.\n" );
+  printf( "Notes: In the table made from the -t option, the fastq file is never read.\n" );
+  printf( "This table just scans the input genome for kmers that flank gaps and makes\n" );
+  printf( "an output table of them. RCK1 and RCK2 are the reverse complements of the\n" );
+  printf( "kmers. K1U and K2U are the uniqueness of these kmers, i.e., how many times\n" );
+  printf( "they occur in the input genome.\n" );
   exit( 0 );
   
 }
@@ -193,6 +198,8 @@ void make_gap_table(  const char* genome_fn, const KSP ks, const int num_n,
   int k1_pos, k2_pos;
   char k1[K+1]; // kmer upstream of gap
   char k2[K+1]; // kmer downstream of gap
+  char rck1[K+1]; // reverse complement of k1
+  char rck2[K+1]; // reverse complement of k1
   char id[MAX_ID_LEN+1];
   char* seq;
 
@@ -237,9 +244,11 @@ void make_gap_table(  const char* genome_fn, const KSP ks, const int num_n,
       /* If we found suitable k1 and k2, then just print some info on them */
       if ( (k1_pos >= 0) &&
            (k2_pos >= 0) ) {
-        printf( "%s %d %d %d %d %s %s %d %d\n",
+	revcom_seq( k1, rck1 );
+	revcom_seq( k2, rck2 );
+        printf( "%s %d %d %d %d %s %s %s %s %d %d\n",
                 id, (int)gaps_p->gap_starts[i], (int)gaps_p->gap_ends[i],
-                (int)k1_pos, (int)k2_pos, k1, k2, (int)k1_mko, (int)k2_mko );
+                (int)k1_pos, (int)k2_pos, k1, k2, rck1, rck2, (int)k1_mko, (int)k2_mko );
       }
       else {
         printf( "%s %d %d NA NA NA NA NA NA\n",
@@ -690,6 +699,7 @@ char best_base_from_counts( int* perc, const int As, const int Cs, const int Gs,
             const char* seq - the sequence to search
             const KSP ks - the kmer structure
             char* kmer - the found kmer
+	    size_t* mko - pointer to the minimum kmer occurance number to populate here
    RETURNS: position of most unique kmer, closest to gap; -1 if none found
    Searches the region of seq indicated by beg and end. Finds the most unique kmer
    in the region. In case of tie (common) will find the kmer that is both most
@@ -847,7 +857,7 @@ int fasta_pop_kmers( const char genome_fn[], KSP ks ) {
       fprintf( stderr, "Counting kmers in %s\n", id );
     }
     if ( seq_len >= ks->k ) { // need at least one k-mer to count kmers!
-      for( pos = 0; pos < seq_len - ks->k; pos++ ) {
+      for( pos = 0; pos <= seq_len - ks->k; pos++ ) {
         kmer_status = kmer2inx( &seq[pos], ks->k, &inx );
         if ( kmer_status ) {
           if ( ks->ka[inx] < MAX_KMER_OCCUR ) {
@@ -1156,13 +1166,21 @@ inline char revcom_char(const char base) {
   }
 }
 
+/* revcom_seq
+   Takes an input DNA sequence and a pointer to a char array
+   to put the reverse complement of that sequence. And then,
+   it does just that.
+   No checks on the length of the char array to put the reverse
+   complement sequence, so be careful. Returns nothing.
+*/
 void revcom_seq( const char seq[], char rcom_seq[] ) {
   int len, i;
   len = strlen(seq);
 
   for (i = 0; i < len; i++) {
-    rcom_seq[i] = revcom_char(seq[i]);
+    rcom_seq[len-(i+1)] = revcom_char(seq[i]);
   }
+  rcom_seq[i] = '\0';
 }
 
 void rev_qual( const char q[], char qrc[] ) {

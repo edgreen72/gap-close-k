@@ -4,7 +4,7 @@
 #include <string.h>
 
 #define MAX_FN_LEN (1024)
-#define MAX_SEQ_LEN (128388608) // ~8 Mb
+#define MAX_SEQ_LEN (128388608) // ~128 Mb
 #define MAX_ID_LEN (256)
 #define MAX_KMER_OCCUR (128)
 #define MAX_UNIQ_KMER (3)
@@ -839,9 +839,11 @@ void free_Gaps( GP gaps ) {
    non-zero => problem */
 int fasta_pop_kmers( const char genome_fn[], KSP ks ) {
   char id[MAX_ID_LEN+1];
+  char rck[K+1]; // reverse complement of each kmer
   char* seq;
   char c;
   int pos = 0;
+  int kpos, rckpos;
   size_t inx = 0;
   size_t seq_len;
   FILE* fa;
@@ -856,13 +858,27 @@ int fasta_pop_kmers( const char genome_fn[], KSP ks ) {
     if ( debug_info ) {
       fprintf( stderr, "Counting kmers in %s\n", id );
     }
-    if ( seq_len >= ks->k ) { // need at least one k-mer to count kmers!
-      for( pos = 0; pos <= seq_len - ks->k; pos++ ) {
-        kmer_status = kmer2inx( &seq[pos], ks->k, &inx );
+    if ( seq_len >= k ) { // need at least one k-mer to count kmers!
+      for( pos = 0; pos <= seq_len - k; pos++ ) {
+        kmer_status = kmer2inx( &seq[pos], k, &inx );
         if ( kmer_status ) {
           if ( ks->ka[inx] < MAX_KMER_OCCUR ) {
             ks->ka[inx]++;
           }
+
+	  /* Now a little routine to quickly make rc of this kmer */
+	  kpos = pos + k - 1;
+	  for( rckpos = 0; rckpos < k; rckpos++ ) {
+	    rck[rckpos] = revcom_char(seq[kpos]);
+	    kpos--;
+	  }
+	  rck[k] = '\0';
+	  if ( kmer2inx( rck, k, &inx ) ) {
+	    if ( ks->ka[inx] < MAX_KMER_OCCUR ) {
+	      ks->ka[inx]++;
+	    }
+	  }
+	  
         }
       }
     }

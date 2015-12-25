@@ -18,7 +18,7 @@
 #define CONS_LENGTH_CUT (95) // minimum percent of spanning reads to consensus to close gap
 #define CONS_BASE_PERC (90) // minimum percent of bases that must match to call a consensus base at each position
 #define DEBUG (0)
-#define VERSION (6)
+#define VERSION (7)
 
 int debug_info = DEBUG; // a true global variable - Use this in functions directly, i.e. not passed
 

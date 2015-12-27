@@ -18,7 +18,7 @@
 #define CONS_LENGTH_CUT (95) // minimum percent of spanning reads to consensus to close gap
 #define CONS_BASE_PERC (90) // minimum percent of bases that must match to call a consensus base at each position
 #define DEBUG (0)
-#define VERSION (7)
+#define VERSION (8)
 
 int debug_info = DEBUG; // a true global variable - Use this in functions directly, i.e. not passed
 
@@ -463,14 +463,15 @@ void fasta_close_gaps_table( const char* genome_fn, const char* fastq_fn,
             strncpy( gen_gap_seq, &seq[k1_pos], (k2_pos - k1_pos + ks->k) );
             gen_gap_seq[k2_pos - k1_pos + ks->k] = '\0';
             find_cons_seq( spans, cons_length );
-	    printf( "%s %d %d %s %s %d %d\n",
+	    printf( "%s %d %d %s %s %d %d %d\n",
 		    id,
 		    (int)k1_pos,
 		    (int)(k2_pos + ks->k),
 		    gen_gap_seq,
 		    spans->cons_seq,
 		    (int)k1_mko,
-		    (int)k2_mko );
+		    (int)k2_mko,
+		    (int)gaps->num_spanners );
 	    closed++;
 	    free( gen_gap_seq );
           }

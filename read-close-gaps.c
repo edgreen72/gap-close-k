@@ -471,7 +471,7 @@ void fasta_close_gaps_table( const char* genome_fn, const char* fastq_fn,
 		    spans->cons_seq,
 		    (int)k1_mko,
 		    (int)k2_mko,
-		    (int)gaps->num_spanners );
+		    (int)spans->num_spanners );
 	    closed++;
 	    free( gen_gap_seq );
           }

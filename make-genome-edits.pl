@@ -37,10 +37,12 @@ while( $seq_o = $genome_o->next_seq ) {
 				$edit_p->[3] );
 	}
 	$seq_o->seq( $seq ); # Assign the edited sequence
-#	$edited_genome_o->write_seq( $seq_o );
 	$total_edited++;
     }
-    $total_unedited++;
+    else {
+	$total_unedited++;
+    }
+    $edited_genome_o->write_seq( $seq_o );
 }
 
 print STDERR "Total sequences   edited: $total_edited\n";

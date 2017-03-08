@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include <string.h>
+#include <unistd.h>
 
 #define MAX_FN_LEN (1024)
 #define MAX_SEQ_LEN (128388608) // ~128 Mb
@@ -82,7 +83,7 @@ int kmer2inx( const char* kmer,
               size_t* inx );
 void output_kmer_dist( KSP ks );
 int next_fastq( FILE* fastq, FQRP fqrp );
-inline char revcom_char(const char base);
+static inline char revcom_char(const char base);
 void revcom_seq( const char seq[], char rcom_seq[] );
 void rev_qual( const char q[], char qrc[] );
 
@@ -1142,7 +1143,7 @@ int next_fastq( FILE* fastq, FQRP fqrp ) {
   return 1;
 }
 
-inline char revcom_char(const char base) {
+static inline char revcom_char(const char base) {
   switch (base) {
   case 'A':
     return 'T';

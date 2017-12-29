@@ -6,7 +6,7 @@
 #include <math.h>
 
 #define MAX_FN_LEN (1024)
-#define MAX_SEQ_LEN (400000000) // 400 Mb
+#define MAX_SEQ_LEN (450000000) // 450 Mb
 #define MAX_RECORDS (500000) // Maximum number of contigs/scaffolds/whatevers
 #define MAX_ID_LEN (256)
 #define DEBUG (0)
@@ -216,9 +216,14 @@ void report( void ) {
   while( n50_tmp < (total_len)/2 ) {
     n50_tmp += lengths[i++];
   }
-  printf( "# Longest sequence: %d\n", (int)lengths[0] );
-  printf( "# N50 sequence is number %d and length: %d\n",
+  printf( "# N50 sequence is number %d and length: %d\n\n",
 	  (int)(i-1), (int)lengths[i-1] );
+  
+  printf( "# 20 longest sequence lengths:\n" );
+  for( i = 0; i < 20; i++ ) {
+    printf( "%d\n", (int)lengths[i] );
+  }
+
     
 }
 

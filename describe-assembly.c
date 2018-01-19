@@ -10,7 +10,7 @@
 #define MAX_RECORDS (500000) // Maximum number of contigs/scaffolds/whatevers
 #define MAX_ID_LEN (256)
 #define DEBUG (0)
-#define VERSION (8)
+#define VERSION (1)
 
 int base_comp[ 6 ]; // counts for each base: A, C, G, T, N, all others
 int dinuc_comp[ 16 ]; // counts for each valid dinucleotide
@@ -32,7 +32,7 @@ void increment_dinuc_comp( const char b, const char c );
 static int cmpintp( const void *p1, const void *p2 );
 
 void help( void ) {
-  printf( "read-close-gaps VERSION %d\n", VERSION );
+  printf( "describe-assembly VERSION %d\n", VERSION );
   printf( "   -g <genome fasta file>\n" );
   printf( "   -d <DEBUG mode - print a bunch of info to STDERR along the way>\n" );
   printf( "Gives summary statistics for base composition, dinucleotide frequencies,\n" );

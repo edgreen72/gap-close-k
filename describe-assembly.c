@@ -11,6 +11,7 @@
 #define MAX_ID_LEN (256)
 #define DEBUG (0)
 #define VERSION (1)
+#define N_DEF (20)
 
 int base_comp[ 6 ]; // counts for each base: A, C, G, T, N, all others
 int dinuc_comp[ 16 ]; // counts for each valid dinucleotide
@@ -26,7 +27,7 @@ int debug_info = DEBUG; // a true global variable
 int fasta_analyze( const char genome_fn[] );
 size_t next_fa( FILE* fp, char* seq, char* id );
 FILE * fileOpen(const char *name, char access_mode[]);
-void report( void );
+void report( int n_to_show );
 void increment_base_comp( const char b );
 void increment_dinuc_comp( const char b, const char c );
 static int cmpintp( const void *p1, const void *p2 );
@@ -35,6 +36,7 @@ void help( void ) {
   printf( "describe-assembly VERSION %d\n", VERSION );
   printf( "   -g <genome fasta file>\n" );
   printf( "   -d <DEBUG mode - print a bunch of info to STDERR along the way>\n" );
+  printf( "   -n <Show lengths of n longest sequences; default = %d>\n", N_DEF );
   printf( "Gives summary statistics for base composition, dinucleotide frequencies,\n" );
   printf( "N50, contig size distribution, number and sizes of runs of Ns.\n" );
   exit( 0 );
@@ -45,17 +47,21 @@ int main( int argc, char* argv[] ) {
   extern char* optarg;
   extern int optin;
   int ich;
+  int n_to_show;
   char genome_fn[MAX_FN_LEN];
 
   /*          PROCESS ARGUMENTS            */
   if ( argc == 1 ) {
     help();
   }
-  
-  while( (ich=getopt( argc, argv, "g:d" )) != -1 ) {
+  n_to_show = N_DEF;
+  while( (ich=getopt( argc, argv, "g:n:d" )) != -1 ) {
     switch(ich) {
     case 'g' :
       strcpy( genome_fn, optarg );
+      break;
+    case 'n' :
+      n_to_show = atoi( optarg );
       break;
     default :
       help();
@@ -66,7 +72,7 @@ int main( int argc, char* argv[] ) {
   fasta_analyze( genome_fn );
 
   /* Make output */
-  report();
+  report( n_to_show );
   exit( 0 );
 }
 
@@ -188,7 +194,7 @@ void increment_dinuc_comp( const char b, const char c ) {
   dinuc_comp[ l_inx ]++;
 }
 
-void report( void ) {
+void report( const int n_to_show ) {
   size_t i;
   size_t n50_tmp = 0;
   printf( "# Length of genome: %lu\n", total_len );
@@ -219,8 +225,8 @@ void report( void ) {
   printf( "# N50 sequence is number %d and length: %d\n\n",
 	  (int)(i-1), (int)lengths[i-1] );
   
-  printf( "# 20 longest sequence lengths:\n" );
-  for( i = 0; i < 20; i++ ) {
+  printf( "# Longest sequence lengths:\n" );
+  for( i = 0; i < n_to_show; i++ ) {
     printf( "%d\n", (int)lengths[i] );
   }
 
